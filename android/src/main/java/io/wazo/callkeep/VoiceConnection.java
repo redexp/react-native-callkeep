@@ -23,12 +23,13 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.support.annotation.Nullable;
-import android.support.v4.content.LocalBroadcastManager;
+import androidx.annotation.Nullable;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.telecom.CallAudioState;
 import android.telecom.Connection;
 import android.telecom.DisconnectCause;
 import android.telecom.TelecomManager;
+import android.media.ToneGenerator;
 import android.net.Uri;
 import android.util.Log;
 
@@ -45,6 +46,7 @@ import static io.wazo.callkeep.RNCallKeepModule.ACTION_HOLD_CALL;
 import static io.wazo.callkeep.RNCallKeepModule.ACTION_MUTE_CALL;
 import static io.wazo.callkeep.RNCallKeepModule.ACTION_UNHOLD_CALL;
 import static io.wazo.callkeep.RNCallKeepModule.ACTION_UNMUTE_CALL;
+import static io.wazo.callkeep.RNCallKeepModule.ACTION_SHOW_UI;
 import static io.wazo.callkeep.RNCallKeepModule.EXTRA_CALLER_NAME;
 import static io.wazo.callkeep.RNCallKeepModule.EXTRA_CALL_NUMBER;
 import static io.wazo.callkeep.RNCallKeepModule.EXTRA_CALL_UUID;
@@ -70,6 +72,8 @@ public class VoiceConnection extends Connection {
         if (name != null && !name.equals("")) {
             setCallerDisplayName(name, TelecomManager.PRESENTATION_ALLOWED);
         }
+
+        setConnectionProperties(Connection.PROPERTY_SELF_MANAGED);
     }
 
     @Override
@@ -116,12 +120,20 @@ public class VoiceConnection extends Connection {
 
     @Override
     public void onDisconnect() {
-        super.onDisconnect();
+        Log.d(TAG, "onDisconnect " + getUUID());
+
+        if (Build.MANUFACTURER.equalsIgnoreCase("Samsung")) {
+            setOnHold();
+            setConnectionProperties(
+                Connection.PROPERTY_SELF_MANAGED |
+                Connection.PROPERTY_IS_EXTERNAL_CALL
+            );
+        }
+
         setDisconnected(new DisconnectCause(DisconnectCause.LOCAL));
         sendCallRequestToActivity(ACTION_END_CALL, handle);
-        Log.d(TAG, "onDisconnect executed");
         try {
-            ((VoiceConnectionService) context).deinitConnection(handle.get(EXTRA_CALL_UUID));
+            ((VoiceConnectionService) context).deinitConnection(getUUID());
         } catch(Throwable exception) {
             Log.e(TAG, "Handle map error", exception);
         }
@@ -129,6 +141,7 @@ public class VoiceConnection extends Connection {
     }
 
     public void reportDisconnect(int reason) {
+        Log.d(TAG, "reportDisconnect " + reason);
         super.onDisconnect();
         switch (reason) {
             case 1:
@@ -150,18 +163,19 @@ public class VoiceConnection extends Connection {
             default:
                 break;
         }
-        ((VoiceConnectionService)context).deinitConnection(handle.get(EXTRA_CALL_UUID));
+        ((VoiceConnectionService)context).deinitConnection(getUUID());
         destroy();
     }
 
     @Override
     public void onAbort() {
+        Log.d(TAG, "onAbort " + getUUID());
         super.onAbort();
         setDisconnected(new DisconnectCause(DisconnectCause.REJECTED));
         sendCallRequestToActivity(ACTION_END_CALL, handle);
         Log.d(TAG, "onAbort executed");
         try {
-            ((VoiceConnectionService) context).deinitConnection(handle.get(EXTRA_CALL_UUID));
+            ((VoiceConnectionService) context).deinitConnection(getUUID());
         } catch(Throwable exception) {
             Log.e(TAG, "Handle map error", exception);
         }
@@ -184,16 +198,24 @@ public class VoiceConnection extends Connection {
 
     @Override
     public void onReject() {
+        Log.d(TAG, "onReject " + getUUID());
         super.onReject();
         setDisconnected(new DisconnectCause(DisconnectCause.REJECTED));
         sendCallRequestToActivity(ACTION_END_CALL, handle);
         Log.d(TAG, "onReject executed");
         try {
-            ((VoiceConnectionService) context).deinitConnection(handle.get(EXTRA_CALL_UUID));
+            ((VoiceConnectionService) context).deinitConnection(getUUID());
         } catch(Throwable exception) {
             Log.e(TAG, "Handle map error", exception);
         }
         destroy();
+    }
+
+    @Override
+    public void onShowIncomingCallUi() {
+        super.onShowIncomingCallUi();
+        Log.d(TAG, "onShowIncomingCallUi executed");
+        sendCallRequestToActivity(ACTION_SHOW_UI, handle);
     }
 
     /*
@@ -215,5 +237,9 @@ public class VoiceConnection extends Connection {
                 LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
             }
         });
+    }
+
+    String getUUID() {
+        return handle.get(EXTRA_CALL_UUID);
     }
 }
