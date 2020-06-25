@@ -76,6 +76,7 @@ public class VoiceConnectionService extends ConnectionService {
     private static Boolean isReachable;
     private static String notReachableCallUuid;
     private static ConnectionRequest currentConnectionRequest;
+    private static PhoneAccountHandle phoneAccountHandle;
     private static String TAG = "RNCK:VoiceConnectionService";
     public static Map<String, VoiceConnection> currentConnections = new HashMap<>();
     public static Boolean hasOutgoingCall = false;
@@ -96,6 +97,10 @@ public class VoiceConnectionService extends ConnectionService {
         isAvailable = false;
         currentConnectionRequest = null;
         currentConnectionService = this;
+    }
+
+    public static void setPhoneAccountHandle(PhoneAccountHandle phoneAccountHandle) {
+        VoiceConnectionService.phoneAccountHandle = phoneAccountHandle;
     }
 
     public static void setAvailable(Boolean value) {
@@ -124,8 +129,6 @@ public class VoiceConnectionService extends ConnectionService {
 
     @Override
     public Connection onCreateIncomingConnection(PhoneAccountHandle connectionManagerPhoneAccount, ConnectionRequest request) {
-        Log.d(TAG, "onCreateIncomingConnection");
-
         Bundle extra = request.getExtras();
         Uri number = request.getAddress();
         String name = extra.getString(EXTRA_CALLER_NAME);
@@ -138,8 +141,6 @@ public class VoiceConnectionService extends ConnectionService {
 
     @Override
     public Connection onCreateOutgoingConnection(PhoneAccountHandle connectionManagerPhoneAccount, ConnectionRequest request) {
-        Log.d(TAG, "onCreateOutgoingConnection");
-
         VoiceConnectionService.hasOutgoingCall = true;
         String uuid = UUID.randomUUID().toString();
 
@@ -275,9 +276,7 @@ public class VoiceConnectionService extends ConnectionService {
         VoiceConnection voiceConnection1 = (VoiceConnection) connection1;
         VoiceConnection voiceConnection2 = (VoiceConnection) connection2;
 
-        PhoneAccountHandle phoneAccountHandle = RNCallKeepModule.handle;
-
-        VoiceConference voiceConference = new VoiceConference(handle);
+        VoiceConference voiceConference = new VoiceConference(phoneAccountHandle);
         voiceConference.addConnection(voiceConnection1);
         voiceConference.addConnection(voiceConnection2);
 

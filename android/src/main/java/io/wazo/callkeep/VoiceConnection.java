@@ -184,6 +184,7 @@ public class VoiceConnection extends Connection {
 
     @Override
     public void onHold() {
+        Log.d(TAG, "onHold " + getUUID());
         super.onHold();
         this.setOnHold();
         sendCallRequestToActivity(ACTION_HOLD_CALL, handle);
@@ -191,6 +192,7 @@ public class VoiceConnection extends Connection {
 
     @Override
     public void onUnhold() {
+        Log.d(TAG, "onUnhold " + getUUID());
         super.onUnhold();
         sendCallRequestToActivity(ACTION_UNHOLD_CALL, handle);
         setActive();

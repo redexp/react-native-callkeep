@@ -48,12 +48,18 @@ class RNCallKeep {
     return this._setupIOS(options.ios);
   };
 
-  hasDefaultPhoneAccount = async (options) => {
-    if (!isIOS) {
-      return this._hasDefaultPhoneAccount(options);
+  hasDefaultPhoneAccount = (options) => {
+    if (isIOS) {
+      return Promise.resolve(true);
     }
 
-    return;
+    return this._hasDefaultPhoneAccount(options);
+  };
+
+  reloadPhoneAccount = (capability) => {
+    if (isIOS) return;
+
+    RNCallKeepModule.reloadPhoneAccount(capability);
   };
 
   displayIncomingCall = (uuid, handle, localizedCallerName, handleType = 'number', hasVideo = false) => {
@@ -73,11 +79,10 @@ class RNCallKeep {
 
   startCall = (uuid, handle, contactIdentifier, handleType = 'number', hasVideo = false ) => {
     if (!isIOS) {
-      RNCallKeepModule.startCall(uuid, handle, contactIdentifier);
-      return;
+      return RNCallKeepModule.startCall(uuid, handle, contactIdentifier);
     }
 
-    RNCallKeepModule.startCall(uuid, handle, contactIdentifier, handleType, hasVideo);
+    return RNCallKeepModule.startCall(uuid, handle, contactIdentifier, handleType, hasVideo);
   };
 
   reportConnectingOutgoingCallWithUUID = (uuid) => {
@@ -159,6 +164,13 @@ class RNCallKeep {
 
   setReachable = () => RNCallKeepModule.setReachable();
 
+  isInCall = () => RNCallKeepModule.isInCall();
+
+  openPhoneAccountSettings = () => RNCallKeepModule.openPhoneAccountSettings();
+  openPhoneAccountSelector = () => RNCallKeepModule.openPhoneAccountSelector();
+  addCallHistoryItem = (data) => RNCallKeepModule.addCallHistoryItem(data);
+  canOutgoingCall = () => RNCallKeepModule.canOutgoingCall();
+
   // @deprecated
   reportUpdatedCall = (uuid, localizedCallerName) => {
     console.warn('RNCallKeep.reportUpdatedCall is deprecated, use RNCallKeep.updateDisplay instead');
@@ -182,7 +194,7 @@ class RNCallKeep {
   _setupAndroid = async (options) => {
     RNCallKeepModule.setup(options);
 
-    await RNCallKeepModule.checkPhoneAccountPermission(options.additionalPermissions || []);
+    //await RNCallKeepModule.checkPhoneAccountPermission(options.additionalPermissions || []);
 
     return true;
   };
@@ -224,6 +236,30 @@ class RNCallKeep {
     }
 
     NativeModules.RNCallKeep.backToForeground();
+  }
+
+  getBluetoothDevices(uuid) {
+    if (isIOS) {
+      return Promise.resolve("");
+    }
+
+    return NativeModules.RNCallKeep.getBluetoothDevices(uuid);
+  }
+
+  requestBluetoothAudio(uuid) {
+    if (isIOS) {
+      return Promise.resolve();
+    }
+
+    return NativeModules.RNCallKeep.requestBluetoothAudio(uuid);
+  }
+
+  checkDefaultPhoneAccount() {
+    if (isIOS) {
+      return;
+    }
+
+    return RNCallKeepModule.checkDefaultPhoneAccount();
   }
 
 }

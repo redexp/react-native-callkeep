@@ -45,6 +45,10 @@ import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.content.ContentValues;
+import android.provider.CallLog;
+
+import android.bluetooth.BluetoothDevice;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Dynamic;
@@ -91,7 +95,7 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
     private static final String E_ACTIVITY_DOES_NOT_EXIST = "E_ACTIVITY_DOES_NOT_EXIST";
     private static final String REACT_NATIVE_MODULE_NAME = "RNCallKeep";
     private static final String[] permissions = { /* Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.CALL_PHONE,  */Manifest.permission.RECORD_AUDIO };
+             Manifest.permission.CALL_PHONE, */ Manifest.permission.RECORD_AUDIO };
 
     private static final String TAG = "RNCK:RNCallKeepModule";
     private static TelecomManager telecomManager;
@@ -99,6 +103,7 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
     private static Promise hasPhoneAccountPromise;
     private ReactApplicationContext reactContext;
     public static PhoneAccountHandle handle;
+    public static String capability = "SELF_MANAGED";
     private boolean isReceiverRegistered = false;
     private VoiceBroadcastReceiver voiceBroadcastReceiver;
     private ReadableMap _settings;
@@ -116,28 +121,27 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void setup(ReadableMap options) {
-        Log.d(TAG, "setup");
         VoiceConnectionService.setAvailable(false);
         this._settings = options;
+
+        if (options.hasKey("capability")) {
+            capability = options.getString("capability");
+        }
 
         if (isConnectionServiceAvailable()) {
             this.registerPhoneAccount(this.getAppContext());
             voiceBroadcastReceiver = new VoiceBroadcastReceiver();
             registerReceiver();
+            // ++
+            VoiceConnectionService.setPhoneAccountHandle(handle);
+            // ++
             VoiceConnectionService.setAvailable(true);
         }
     }
 
     @ReactMethod
     public void displayIncomingCall(String uuid, String number, String callerName) {
-        Log.d(TAG, "displayIncomingCall");
-
-        if (!isConnectionServiceAvailable()) {
-            Log.d(TAG, "displayIncomingCall !isConnectionServiceAvailable");
-            return;
-        }
-        if (!hasPhoneAccount()) {
-            Log.d(TAG, "displayIncomingCall !hasPhoneAccount");
+        if (!isConnectionServiceAvailable() || !hasPhoneAccount()) {
             return;
         }
 
@@ -155,39 +159,34 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void answerIncomingCall(String uuid) {
-        Log.d(TAG, "answerIncomingCall " + uuid);
-
         if (!isConnectionServiceAvailable() || !hasPhoneAccount()) {
-            Log.d(TAG, "answerIncomingCall NO service");
             return;
         }
 
         Connection conn = VoiceConnectionService.getConnection(uuid);
         if (conn == null) {
-            Log.d(TAG, "answerIncomingCall NO connection");
             return;
         }
 
         conn.onAnswer();
-        Log.d(TAG, "answerIncomingCall executed");
     }
 
     @ReactMethod
-    public void startCall(String uuid, String number, String callerName) {
+    public void startCall(String uuid, String number, String callerName, Promise promise) {
         if (!isConnectionServiceAvailable()) {
-            Log.d(TAG, "startCall NO ConnectionService");
+            promise.reject("!isConnectionServiceAvailable");
             return;
         }
         if (!hasPhoneAccount()) {
-            Log.d(TAG, "startCall NO PhoneAccount");
+            promise.reject("!hasPhoneAccount");
             return;
         }
         if (!hasPermissions()) {
-            Log.d(TAG, "startCall NO Permissions");
+            promise.reject("!hasPermissions");
             return;
         }
         if (number == null) {
-            Log.d(TAG, "startCall NO number");
+            promise.reject("number == null");
             return;
         }
 
@@ -211,13 +210,11 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
     public void endCall(String uuid) {
         Log.d(TAG, "endCall " + uuid);
         if (!isConnectionServiceAvailable() || !hasPhoneAccount()) {
-            Log.d(TAG, "endCall NO service");
             return;
         }
 
         Connection conn = VoiceConnectionService.getConnection(uuid);
         if (conn == null) {
-            Log.d(TAG, "endCall NO connection");
             return;
         }
         conn.onDisconnect();
@@ -272,7 +269,7 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void checkDefaultPhoneAccount(Promise promise) {
-        if (!isConnectionServiceAvailable() || !hasPhoneAccount()) {
+        /* if (!isConnectionServiceAvailable() || !hasPhoneAccount()) {
             promise.resolve(true);
             return;
         }
@@ -280,12 +277,21 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
         if (!Build.MANUFACTURER.equalsIgnoreCase("Samsung")) {
             promise.resolve(true);
             return;
+        } */
+
+//         boolean hasSim = telephonyManager.getSimState() != TelephonyManager.SIM_STATE_ABSENT;
+//         boolean hasDefaultAccount = telecomManager.getDefaultOutgoingPhoneAccount("tel") != null;
+
+        List<PhoneAccountHandle> list = telecomManager.getCallCapablePhoneAccounts();
+        boolean enabled = false;
+        for (PhoneAccountHandle item : list) {
+            if (item.toString().contains("com.networth.centrex")) {
+                enabled = true;
+                break;
+            }
         }
 
-        boolean hasSim = telephonyManager.getSimState() != TelephonyManager.SIM_STATE_ABSENT;
-        boolean hasDefaultAccount = telecomManager.getDefaultOutgoingPhoneAccount("tel") != null;
-
-        promise.resolve(!hasSim || hasDefaultAccount);
+        promise.resolve(enabled);
     }
 
     @ReactMethod
@@ -300,6 +306,57 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
         } else {
             conn.onUnhold();
         }
+    }
+
+    @ReactMethod
+    public void getBluetoothDevices(String uuid, Promise promise) {
+        Log.d(TAG, "getBluetoothDevices " + uuid);
+
+        Connection conn = VoiceConnectionService.getConnection(uuid);
+        if (conn == null) {
+            promise.reject("NO Connection");
+            return;
+        }
+
+        if (conn.getCallAudioState() == null) {
+            promise.reject("NO CallAudioState");
+            return;
+        }
+
+        String s = "";
+        for (BluetoothDevice d: conn.getCallAudioState().getSupportedBluetoothDevices()) {
+            s += d.getName() + ", ";
+        }
+
+        promise.resolve(s);
+    }
+
+    @ReactMethod
+    public void requestBluetoothAudio(String uuid, Promise promise) {
+        Log.d(TAG, "getBluetoothDevices " + uuid);
+
+        Connection conn = VoiceConnectionService.getConnection(uuid);
+        if (conn == null) {
+            promise.reject("NO Connection");
+            return;
+        }
+
+        CallAudioState cs = conn.getCallAudioState();
+        if (cs == null) {
+            promise.reject("NO CallAudioState");
+            return;
+        }
+
+        BluetoothDevice d = cs.getSupportedBluetoothDevices().iterator().next();
+
+        if (d == null) {
+            promise.reject("NO BluetoothDevice");
+            return;
+        }
+
+        conn.requestBluetoothAudio(d);
+
+        promise.resolve(true);
     }
 
     @ReactMethod
@@ -396,18 +453,13 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void setCurrentCallActive(String uuid) {
-        Log.d(TAG, "setCurrentCallActive");
-
         Connection conn = VoiceConnectionService.getConnection(uuid);
         if (conn == null) {
-            Log.d(TAG, "setCurrentCallActive NO connection");
             return;
         }
 
         conn.setConnectionCapabilities(conn.getConnectionCapabilities() | Connection.CAPABILITY_HOLD);
         conn.setActive();
-
-        Log.d(TAG, "setCurrentCallActive executed");
     }
 
     @ReactMethod
@@ -430,11 +482,17 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void openPhoneAccountSettings() {
-        if (!isConnectionServiceAvailable()) {
-            return;
-        }
+    public void openPhoneAccountSelector() {
+        Context context = getAppContext();
 
+        Intent intent = new Intent();
+        intent.setComponent(new ComponentName("com.android.server.telecom","com.android.server.telecom.settings.EnableAccountPreferenceActivity"));
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        context.startActivity(intent);
+    }
+
+    @ReactMethod
+    public void openPhoneAccountSettings() {
         Intent intent = new Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         this.getAppContext().startActivity(intent);
@@ -458,6 +516,13 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
         activity.startActivity(focusIntent);
     }
 
+    @ReactMethod
+    public void isInCall(Promise promise) {
+        TelecomManager tm = (TelecomManager) this.getAppContext().getSystemService(Context.TELECOM_SERVICE);
+
+        promise.resolve(tm.isInCall());
+    }
+
     private void registerPhoneAccount(Context appContext) {
         if (!isConnectionServiceAvailable()) {
             return;
@@ -468,8 +533,11 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
 
         handle = new PhoneAccountHandle(cName, appName);
 
-        PhoneAccount.Builder builder = new PhoneAccount.Builder(handle, appName)
-                .setCapabilities(/* PhoneAccount.CAPABILITY_CALL_PROVIDER |  */PhoneAccount.CAPABILITY_SELF_MANAGED);
+        PhoneAccount.Builder builder = new PhoneAccount.Builder(handle, appName);
+
+        Log.d(TAG, capability);
+
+        builder.setCapabilities(capability.equals("SELF_MANAGED") ? PhoneAccount.CAPABILITY_SELF_MANAGED : PhoneAccount.CAPABILITY_CALL_PROVIDER);
 
         if (_settings != null && _settings.hasKey("imageName")) {
             int identifier = appContext.getResources().getIdentifier(_settings.getString("imageName"), "drawable", appContext.getPackageName());
@@ -483,6 +551,55 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
         telecomManager = (TelecomManager) this.getAppContext().getSystemService(Context.TELECOM_SERVICE);
 
         telecomManager.registerPhoneAccount(account);
+    }
+
+    @ReactMethod
+    public void reloadPhoneAccount(String capability) {
+        Log.d(TAG, "reloadPhoneAccount: " + capability);
+
+        if (telecomManager != null && handle != null) {
+            telecomManager.unregisterPhoneAccount(handle);
+        }
+
+        RNCallKeepModule.capability = capability;
+
+        this.registerPhoneAccount(this.getAppContext());
+        VoiceConnectionService.setPhoneAccountHandle(handle);
+    }
+
+    @ReactMethod
+    public void addCallHistoryItem(ReadableMap data){
+        Context context = getAppContext();
+
+        if (context == null) return;
+
+        ContentValues values = new ContentValues();
+        values.put(CallLog.Calls.NUMBER, data.getString("number"));
+        values.put(CallLog.Calls.CACHED_NAME, data.getString("name"));
+        values.put(CallLog.Calls.CACHED_PHOTO_URI, data.getString("photo"));
+        values.put(CallLog.Calls.DURATION, data.getInt("duration"));
+        values.put(CallLog.Calls.TYPE, data.getString("type").equals("outgoing") ? CallLog.Calls.OUTGOING_TYPE : CallLog.Calls.INCOMING_TYPE);
+        values.put(CallLog.Calls.DATE, System.currentTimeMillis());
+        values.put(CallLog.Calls.NEW, 1);
+        values.put(CallLog.Calls.CACHED_NUMBER_TYPE, 0);
+        values.put(CallLog.Calls.CACHED_NUMBER_LABEL, "");
+
+        if (handle != null) {
+            values.put(CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME, handle.getComponentName().flattenToString());
+            values.put(CallLog.Calls.PHONE_ACCOUNT_ID, handle.getId());
+        }
+
+        context.getContentResolver().insert(CallLog.Calls.CONTENT_URI, values);
+    }
+
+    @ReactMethod
+    public void canOutgoingCall(Promise promise){
+        if (telecomManager != null && handle != null) {
+            promise.resolve(telecomManager.isOutgoingCallPermitted(handle));
+        }
+        else {
+            promise.reject("TelecomManager not initialized");
+        }
     }
 
     private void sendEventToJS(String eventName, @Nullable WritableMap params) {
