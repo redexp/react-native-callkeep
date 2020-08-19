@@ -50,6 +50,7 @@ import static io.wazo.callkeep.RNCallKeepModule.ACTION_SHOW_UI;
 import static io.wazo.callkeep.RNCallKeepModule.EXTRA_CALLER_NAME;
 import static io.wazo.callkeep.RNCallKeepModule.EXTRA_CALL_NUMBER;
 import static io.wazo.callkeep.RNCallKeepModule.EXTRA_CALL_UUID;
+import static io.wazo.callkeep.RNCallKeepModule.EXTRA_CAPABILITY;
 
 @TargetApi(Build.VERSION_CODES.M)
 public class VoiceConnection extends Connection {
@@ -65,6 +66,7 @@ public class VoiceConnection extends Connection {
 
         String number = handle.get(EXTRA_CALL_NUMBER);
         String name = handle.get(EXTRA_CALLER_NAME);
+        String capability = handle.get(EXTRA_CAPABILITY);
 
         if (number != null) {
             setAddress(Uri.parse(number), TelecomManager.PRESENTATION_ALLOWED);
@@ -73,7 +75,9 @@ public class VoiceConnection extends Connection {
             setCallerDisplayName(name, TelecomManager.PRESENTATION_ALLOWED);
         }
 
-        setConnectionProperties(Connection.PROPERTY_SELF_MANAGED);
+        if (capability != null && capability.equals("SELF_MANAGED")) {
+            setConnectionProperties(Connection.PROPERTY_SELF_MANAGED);
+        }
     }
 
     @Override

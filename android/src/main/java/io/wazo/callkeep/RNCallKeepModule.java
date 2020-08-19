@@ -47,6 +47,7 @@ import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.content.ContentValues;
 import android.provider.CallLog;
+import android.view.WindowManager;
 
 import android.bluetooth.BluetoothDevice;
 
@@ -59,6 +60,7 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.WritableNativeArray;
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter;
 
 import java.lang.reflect.Array;
@@ -80,6 +82,7 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
     public static final String EXTRA_CALLER_NAME = "EXTRA_CALLER_NAME";
     public static final String EXTRA_CALL_UUID = "EXTRA_CALL_UUID";
     public static final String EXTRA_CALL_NUMBER = "EXTRA_CALL_NUMBER";
+    public static final String EXTRA_CAPABILITY = "EXTRA_CAPABILITY";
     public static final String ACTION_END_CALL = "ACTION_END_CALL";
     public static final String ACTION_ANSWER_CALL = "ACTION_ANSWER_CALL";
     public static final String ACTION_MUTE_CALL = "ACTION_MUTE_CALL";
@@ -153,6 +156,7 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
         extras.putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, uri);
         extras.putString(EXTRA_CALLER_NAME, callerName);
         extras.putString(EXTRA_CALL_UUID, uuid);
+        extras.putString(EXTRA_CAPABILITY, capability);
 
         telecomManager.addNewIncomingCall(handle, extras);
     }
@@ -199,11 +203,14 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
         callExtras.putString(EXTRA_CALLER_NAME, callerName);
         callExtras.putString(EXTRA_CALL_UUID, uuid);
         callExtras.putString(EXTRA_CALL_NUMBER, number);
+        callExtras.putString(EXTRA_CAPABILITY, capability);
 
         extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle);
         extras.putParcelable(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, callExtras);
 
         telecomManager.placeCall(uri, extras);
+
+        promise.resolve("DONE");
     }
 
     @ReactMethod
@@ -269,19 +276,6 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void checkDefaultPhoneAccount(Promise promise) {
-        /* if (!isConnectionServiceAvailable() || !hasPhoneAccount()) {
-            promise.resolve(true);
-            return;
-        }
-
-        if (!Build.MANUFACTURER.equalsIgnoreCase("Samsung")) {
-            promise.resolve(true);
-            return;
-        } */
-
-//         boolean hasSim = telephonyManager.getSimState() != TelephonyManager.SIM_STATE_ABSENT;
-//         boolean hasDefaultAccount = telecomManager.getDefaultOutgoingPhoneAccount("tel") != null;
-
         List<PhoneAccountHandle> list = telecomManager.getCallCapablePhoneAccounts();
         boolean enabled = false;
         for (PhoneAccountHandle item : list) {
@@ -292,6 +286,17 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
         }
 
         promise.resolve(enabled);
+    }
+
+    @ReactMethod
+    public void getCallCapablePhoneAccounts(Promise promise) {
+        List<PhoneAccountHandle> list = telecomManager.getCallCapablePhoneAccounts();
+        WritableNativeArray items = new WritableNativeArray();
+        for (PhoneAccountHandle item : list) {
+            items.pushString(item.toString());
+        }
+
+        promise.resolve(items);
     }
 
     @ReactMethod
@@ -509,11 +514,22 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
         Context context = getAppContext();
         String packageName = context.getApplicationContext().getPackageName();
         Intent focusIntent = context.getPackageManager().getLaunchIntentForPackage(packageName).cloneFilter();
-
-        focusIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-
         Activity activity = getCurrentActivity();
-        activity.startActivity(focusIntent);
+        boolean isOpened = activity != null;
+        Log.d(TAG, "backToForeground, app isOpened ?" + (isOpened ? "true" : "false"));
+
+        if (isOpened) {
+            focusIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            activity.startActivity(focusIntent);
+        } else {
+
+            focusIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK +
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED +
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD +
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+
+            getReactApplicationContext().startActivity(focusIntent);
+        }
     }
 
     @ReactMethod
@@ -554,7 +570,7 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void reloadPhoneAccount(String capability) {
+    public void reloadPhoneAccount(String capability, Promise promise) {
         Log.d(TAG, "reloadPhoneAccount: " + capability);
 
         if (telecomManager != null && handle != null) {
@@ -565,6 +581,8 @@ public class RNCallKeepModule extends ReactContextBaseJavaModule {
 
         this.registerPhoneAccount(this.getAppContext());
         VoiceConnectionService.setPhoneAccountHandle(handle);
+
+        promise.resolve("DONE");
     }
 
     @ReactMethod
