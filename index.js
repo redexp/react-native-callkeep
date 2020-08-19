@@ -57,9 +57,9 @@ class RNCallKeep {
   };
 
   reloadPhoneAccount = (capability) => {
-    if (isIOS) return;
+    if (isIOS) return Promise.resolve();
 
-    RNCallKeepModule.reloadPhoneAccount(capability);
+    return RNCallKeepModule.reloadPhoneAccount(capability);
   };
 
   displayIncomingCall = (uuid, handle, localizedCallerName, handleType = 'number', hasVideo = false) => {
