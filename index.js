@@ -256,7 +256,7 @@ class RNCallKeep {
 
   checkDefaultPhoneAccount() {
     if (isIOS) {
-      return;
+      return Promise.resolve(true);
     }
 
     return RNCallKeepModule.checkDefaultPhoneAccount();

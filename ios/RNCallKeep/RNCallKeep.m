@@ -587,7 +587,7 @@ continueUserActivity:(NSUserActivity *)userActivity
     //do this first, audio sessions are flakey
     [self configureAudioSession];
     //tell the JS to actually make the call
-    [self sendEventWithName:RNCallKeepDidReceiveStartCallAction body:@{ @"callUUID": [action.callUUID.UUIDString lowercaseString], @"handle": action.handle.value }];
+    [self sendEventWithName:RNCallKeepDidReceiveStartCallAction body:@{ @"callUUID": [action.callUUID.UUIDString lowercaseString], @"handle": action.handle.value, @"isVideo": @(action.isVideo) }];
     [action fulfill];
 }
 
